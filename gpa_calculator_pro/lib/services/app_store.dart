@@ -6,6 +6,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/semester.dart';
 
 class AppStore extends ChangeNotifier {
+  static const String defaultEmail = 'kazishihab248@gmail.com';
+  static const String defaultPassword = '00000000';
+
   AppStore._(this.prefs) {
     _load();
   }
@@ -105,6 +108,11 @@ class AppStore extends ChangeNotifier {
     return RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email.trim());
   }
 
+  bool _isDefaultCredentials(String email, String password) {
+    return _normalizeEmail(email) == defaultEmail &&
+        password.trim() == defaultPassword;
+  }
+
   Future<void> signUp({
     required String name,
     required String email,
@@ -116,19 +124,17 @@ class AppStore extends ChangeNotifier {
     final normalizedEmail = _normalizeEmail(email);
     final cleanPassword = password.trim();
 
+    if (!_isDefaultCredentials(normalizedEmail, cleanPassword)) {
+      throw Exception('Only the default admin account is allowed.');
+    }
+
     if (cleanName.isEmpty) throw Exception('Please enter your name');
     if (!_isValidEmail(normalizedEmail)) {
       throw Exception('Please enter a valid email address');
     }
-    if (cleanPassword.length < 6) {
-      throw Exception('Password must be at least 6 characters');
-    }
-    if (_users.containsKey(normalizedEmail)) {
-      throw Exception('An account with this email already exists');
-    }
 
     _users[normalizedEmail] = {
-      'password': cleanPassword,
+      'password': defaultPassword,
       'name': cleanName,
       'id': id.trim(),
       'uni': uni.trim(),
@@ -147,11 +153,12 @@ class AppStore extends ChangeNotifier {
   Future<void> loginWithEmail(String email, String password) async {
     final normalizedEmail = _normalizeEmail(email);
     final cleanPassword = password.trim();
-    final profile = _users[normalizedEmail];
 
-    if (profile == null || profile['password'] != cleanPassword) {
+    if (!_isDefaultCredentials(normalizedEmail, cleanPassword)) {
       throw Exception('Invalid email or password');
     }
+
+    final profile = _users[normalizedEmail] ?? <String, String>{};
 
     loggedIn = true;
     onboardingComplete = true;
@@ -166,12 +173,20 @@ class AppStore extends ChangeNotifier {
   }
 
   Future<void> login(String name, String id, String uni) async {
+    final normalizedEmail = userEmail.isNotEmpty ? userEmail : defaultEmail;
+    final defaultMatch =
+        _isDefaultCredentials(normalizedEmail, defaultPassword);
+
+    if (!defaultMatch) {
+      throw Exception('This app only allows the default login account.');
+    }
+
     loggedIn = true;
     onboardingComplete = true;
     studentName = name.trim().isEmpty ? 'Student' : name.trim();
     studentId = id.trim();
     university = uni.trim();
-    userEmail = userEmail.isNotEmpty ? userEmail : 'guest@local.app';
+    userEmail = normalizedEmail;
     await _save();
     notifyListeners();
   }
