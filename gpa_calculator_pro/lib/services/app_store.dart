@@ -18,6 +18,8 @@ class AppStore extends ChangeNotifier {
   String studentName = 'Student';
   String studentId = '';
   String university = '';
+  String userEmail = '';
+  Map<String, Map<String, String>> _users = <String, Map<String, String>>{};
   Map<String, double> scale = Map<String, double>.from(defaultScale);
   List<SemesterRecord> history = <SemesterRecord>[];
 
@@ -42,6 +44,28 @@ class AppStore extends ChangeNotifier {
     studentName = prefs!.getString('studentName') ?? 'Student';
     studentId = prefs!.getString('studentId') ?? '';
     university = prefs!.getString('university') ?? '';
+    userEmail = prefs!.getString('userEmail') ?? '';
+
+    final rawUsers = prefs!.getString('users');
+    if (rawUsers != null && rawUsers.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(rawUsers);
+        if (decoded is Map) {
+          _users = decoded.map<String, Map<String, String>>((key, value) {
+            if (value is Map) {
+              final profile = <String, String>{};
+              value.forEach((innerKey, innerValue) {
+                profile[innerKey.toString()] = innerValue.toString();
+              });
+              return MapEntry(key.toString(), profile);
+            }
+            return MapEntry(key.toString(), <String, String>{});
+          });
+        }
+      } catch (_) {
+        _users = <String, Map<String, String>>{};
+      }
+    }
 
     final rawHistory = prefs!.getString('history');
     if (rawHistory != null && rawHistory.isNotEmpty) {
@@ -75,12 +99,79 @@ class AppStore extends ChangeNotifier {
     }
   }
 
+  String _normalizeEmail(String email) => email.trim().toLowerCase();
+
+  bool _isValidEmail(String email) {
+    return RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email.trim());
+  }
+
+  Future<void> signUp({
+    required String name,
+    required String email,
+    required String password,
+    String id = '',
+    String uni = '',
+  }) async {
+    final cleanName = name.trim();
+    final normalizedEmail = _normalizeEmail(email);
+    final cleanPassword = password.trim();
+
+    if (cleanName.isEmpty) throw Exception('Please enter your name');
+    if (!_isValidEmail(normalizedEmail)) {
+      throw Exception('Please enter a valid email address');
+    }
+    if (cleanPassword.length < 6) {
+      throw Exception('Password must be at least 6 characters');
+    }
+    if (_users.containsKey(normalizedEmail)) {
+      throw Exception('An account with this email already exists');
+    }
+
+    _users[normalizedEmail] = {
+      'password': cleanPassword,
+      'name': cleanName,
+      'id': id.trim(),
+      'uni': uni.trim(),
+    };
+
+    loggedIn = true;
+    onboardingComplete = true;
+    studentName = cleanName;
+    studentId = id.trim();
+    university = uni.trim();
+    userEmail = normalizedEmail;
+    await _save();
+    notifyListeners();
+  }
+
+  Future<void> loginWithEmail(String email, String password) async {
+    final normalizedEmail = _normalizeEmail(email);
+    final cleanPassword = password.trim();
+    final profile = _users[normalizedEmail];
+
+    if (profile == null || profile['password'] != cleanPassword) {
+      throw Exception('Invalid email or password');
+    }
+
+    loggedIn = true;
+    onboardingComplete = true;
+    studentName = profile['name']?.trim().isNotEmpty == true
+        ? profile['name']!
+        : 'Student';
+    studentId = profile['id'] ?? '';
+    university = profile['uni'] ?? '';
+    userEmail = normalizedEmail;
+    await _save();
+    notifyListeners();
+  }
+
   Future<void> login(String name, String id, String uni) async {
     loggedIn = true;
     onboardingComplete = true;
     studentName = name.trim().isEmpty ? 'Student' : name.trim();
     studentId = id.trim();
     university = uni.trim();
+    userEmail = userEmail.isNotEmpty ? userEmail : 'guest@local.app';
     await _save();
     notifyListeners();
   }
@@ -95,12 +186,23 @@ class AppStore extends ChangeNotifier {
     studentName = name.trim().isEmpty ? 'Student' : name.trim();
     studentId = id.trim();
     university = uni.trim();
+
+    if (userEmail.isNotEmpty) {
+      final profile = _users[_normalizeEmail(userEmail)];
+      if (profile != null) {
+        profile['name'] = studentName;
+        profile['id'] = studentId;
+        profile['uni'] = university;
+      }
+    }
+
     await _save();
     notifyListeners();
   }
 
   Future<void> logout() async {
     loggedIn = false;
+    userEmail = '';
     await _save();
     notifyListeners();
   }
@@ -151,6 +253,8 @@ class AppStore extends ChangeNotifier {
     await prefs!.setString('studentName', studentName);
     await prefs!.setString('studentId', studentId);
     await prefs!.setString('university', university);
+    await prefs!.setString('userEmail', userEmail);
+    await prefs!.setString('users', jsonEncode(_users));
     await prefs!.setString(
       'history',
       jsonEncode(history.map((e) => e.toJson()).toList()),

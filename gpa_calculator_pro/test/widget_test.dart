@@ -83,6 +83,47 @@ void main() {
     expect(find.text('Student Name'), findsOneWidget);
   });
 
+  test('email signup and login persist locally', () async {
+    final store = await AppStore.create();
+
+    await store.signUp(
+      name: 'Amina Rahman',
+      email: 'amina@example.com',
+      password: 'StrongPass123',
+      id: 'ST-12',
+      uni: 'Example University',
+    );
+
+    expect(store.loggedIn, isTrue);
+    expect(store.studentName, 'Amina Rahman');
+    expect(store.userEmail, 'amina@example.com');
+
+    await store.logout();
+    await store.loginWithEmail('amina@example.com', 'StrongPass123');
+
+    expect(store.loggedIn, isTrue);
+    expect(store.studentName, 'Amina Rahman');
+  });
+
+  test('wrong password rejects login', () async {
+    final store = await AppStore.create();
+
+    await store.signUp(
+      name: 'Amina Rahman',
+      email: 'amina@example.com',
+      password: 'StrongPass123',
+      id: 'ST-12',
+      uni: 'Example University',
+    );
+
+    await store.logout();
+
+    expect(
+      () async => store.loginWithEmail('amina@example.com', 'wrongpass'),
+      throwsA(isA<Exception>()),
+    );
+  });
+
   test('profile and login state persist locally', () async {
     final store = await AppStore.create();
     await store.login('Amina Rahman', 'ST-12', 'Example University');
