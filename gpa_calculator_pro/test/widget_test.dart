@@ -45,29 +45,29 @@ void main() {
     expect(restored.gpa, closeTo(3.7, 0.0001));
   });
 
-  testWidgets('default login opens the dashboard', (tester) async {
+  testWidgets('signup and login works for multiple users', (tester) async {
     final store = await AppStore.create();
-    await store.completeOnboarding();
-    await tester.pumpWidget(GpaApp(store: store));
-    await tester.pump(const Duration(milliseconds: 800));
-
-    expect(find.text('Email Address'), findsOneWidget);
-
-    await tester.enterText(
-      find.byType(TextFormField).at(0),
-      AppStore.defaultEmail,
+    await store.signUp(
+      name: 'Alice',
+      email: 'alice@example.com',
+      password: 'secure123',
     );
-    await tester.enterText(
-      find.byType(TextFormField).at(1),
-      AppStore.defaultPassword,
-    );
-    await tester.ensureVisible(find.text('Log In'));
-    await tester.tap(find.text('Log In'));
-    await tester.pumpAndSettle();
 
     expect(store.loggedIn, isTrue);
-    expect(store.userEmail, AppStore.defaultEmail);
-    expect(find.text('Welcome back, Student 👋'), findsOneWidget);
+    expect(store.userEmail, 'alice@example.com');
+
+    await store.logout();
+    await store.loginWithEmail('alice@example.com', 'secure123');
+    expect(store.studentName, 'Alice');
+
+    await store.signUp(
+      name: 'Bob',
+      email: 'bob@example.com',
+      password: 'strong456',
+    );
+
+    expect(store.studentName, 'Bob');
+    expect(store.userEmail, 'bob@example.com');
   });
 
   testWidgets('onboarding advances and persists completion', (tester) async {
@@ -84,57 +84,44 @@ void main() {
     await tester.tap(find.text('Skip'));
     await tester.pumpAndSettle();
     expect(store.onboardingComplete, isTrue);
-    expect(find.text('Email Address'), findsOneWidget);
+    expect(find.text('Student Name'), findsOneWidget);
   });
 
-  test('default signup and login persist locally', () async {
+  test('notification is created when GPA is saved', () async {
     final store = await AppStore.create();
-
     await store.signUp(
-      name: 'Kazi Shihab',
-      email: AppStore.defaultEmail,
-      password: AppStore.defaultPassword,
-      id: 'ST-12',
-      uni: 'Example University',
+      name: 'Amina',
+      email: 'amina@example.com',
+      password: 'secret123',
     );
 
-    expect(store.loggedIn, isTrue);
-    expect(store.studentName, 'Kazi Shihab');
-    expect(store.userEmail, AppStore.defaultEmail);
-
-    await store.logout();
-    await store.loginWithEmail(AppStore.defaultEmail, AppStore.defaultPassword);
-
-    expect(store.loggedIn, isTrue);
-    expect(store.studentName, 'Kazi Shihab');
-  });
-
-  test('other credentials are rejected', () async {
-    final store = await AppStore.create();
-
-    expect(
-      () async => store.loginWithEmail('someoneelse@gmail.com', '12345678'),
-      throwsA(isA<Exception>()),
+    final record = SemesterRecord(
+      semester: 'Spring 2026',
+      date: DateTime(2026, 2, 10),
+      courses: [
+        Course(name: 'Math', code: 'M101', credit: 3, grade: 'A'),
+      ],
+      scale: defaultScale,
     );
 
-    expect(
-      () async => store.signUp(
-        name: 'Other User',
-        email: 'someoneelse@gmail.com',
-        password: '12345678',
-      ),
-      throwsA(isA<Exception>()),
-    );
+    await store.addRecord(record);
+
+    expect(store.notifications, isNotEmpty);
+    expect(store.notifications.first.title, contains('GPA'));
   });
 
   test('profile and login state persist locally', () async {
     final store = await AppStore.create();
-    await store.loginWithEmail(AppStore.defaultEmail, AppStore.defaultPassword);
+    await store.signUp(
+      name: 'Amina',
+      email: 'amina@example.com',
+      password: 'secret123',
+    );
 
     final restoredStore = await AppStore.create();
 
     expect(restoredStore.loggedIn, isTrue);
-    expect(restoredStore.studentName, 'Student');
-    expect(restoredStore.userEmail, AppStore.defaultEmail);
+    expect(restoredStore.studentName, 'Amina');
+    expect(restoredStore.userEmail, 'amina@example.com');
   });
 }
