@@ -84,6 +84,10 @@ void main() {
     await tester.tap(find.text('Skip'));
     await tester.pumpAndSettle();
     expect(store.onboardingComplete, isTrue);
+    expect(find.text('Email Address'), findsOneWidget);
+
+    await tester.tap(find.text('Need an account? Sign up'));
+    await tester.pumpAndSettle();
     expect(find.text('Student Name'), findsOneWidget);
   });
 
