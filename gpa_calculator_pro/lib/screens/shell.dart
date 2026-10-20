@@ -6,6 +6,7 @@ import 'calculator.dart';
 import 'cgpa.dart';
 import 'dashboard.dart';
 import 'history.dart';
+import 'notifications.dart';
 import 'reports.dart';
 import 'settings.dart';
 
@@ -28,6 +29,7 @@ class _ShellState extends State<Shell> {
         Cgpa(store: widget.store),
         Analytics(store: widget.store),
         Reports(store: widget.store),
+        NotificationCenter(store: widget.store),
         SettingsScreen(store: widget.store),
       ];
 
@@ -38,6 +40,7 @@ class _ShellState extends State<Shell> {
     'CGPA Planner',
     'Analytics',
     'Reports',
+    'Notifications',
     'Settings',
   ];
 
@@ -48,6 +51,7 @@ class _ShellState extends State<Shell> {
     Icons.school_rounded,
     Icons.insights_rounded,
     Icons.picture_as_pdf_rounded,
+    Icons.notifications_rounded,
     Icons.settings_rounded,
   ];
 
