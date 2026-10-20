@@ -5,10 +5,37 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/semester.dart';
 
-class AppStore extends ChangeNotifier {
-  static const String defaultEmail = 'kazishihab248@gmail.com';
-  static const String defaultPassword = '00000000';
+class AppNotification {
+  AppNotification({
+    required this.id,
+    required this.title,
+    required this.message,
+    required this.createdAt,
+  });
 
+  final String id;
+  final String title;
+  final String message;
+  final DateTime createdAt;
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'message': message,
+        'createdAt': createdAt.toIso8601String(),
+      };
+
+  factory AppNotification.fromJson(Map<String, dynamic> json) =>
+      AppNotification(
+        id: json['id']?.toString() ?? '',
+        title: json['title']?.toString() ?? '',
+        message: json['message']?.toString() ?? '',
+        createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ??
+            DateTime.now(),
+      );
+}
+
+class AppStore extends ChangeNotifier {
   AppStore._(this.prefs) {
     _load();
   }
@@ -23,6 +50,7 @@ class AppStore extends ChangeNotifier {
   String university = '';
   String userEmail = '';
   Map<String, Map<String, String>> _users = <String, Map<String, String>>{};
+  List<AppNotification> notifications = <AppNotification>[];
   Map<String, double> scale = Map<String, double>.from(defaultScale);
   List<SemesterRecord> history = <SemesterRecord>[];
 
@@ -38,6 +66,7 @@ class AppStore extends ChangeNotifier {
     if (prefs == null) {
       scale = Map<String, double>.from(defaultScale);
       history = <SemesterRecord>[];
+      notifications = <AppNotification>[];
       return;
     }
 
@@ -67,6 +96,22 @@ class AppStore extends ChangeNotifier {
         }
       } catch (_) {
         _users = <String, Map<String, String>>{};
+      }
+    }
+
+    final rawNotifications = prefs!.getString('notifications');
+    if (rawNotifications != null && rawNotifications.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(rawNotifications);
+        if (decoded is List) {
+          notifications = decoded
+              .whereType<Map>()
+              .map(
+                  (e) => AppNotification.fromJson(Map<String, dynamic>.from(e)))
+              .toList();
+        }
+      } catch (_) {
+        notifications = <AppNotification>[];
       }
     }
 
@@ -108,11 +153,6 @@ class AppStore extends ChangeNotifier {
     return RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email.trim());
   }
 
-  bool _isDefaultCredentials(String email, String password) {
-    return _normalizeEmail(email) == defaultEmail &&
-        password.trim() == defaultPassword;
-  }
-
   Future<void> signUp({
     required String name,
     required String email,
@@ -124,17 +164,19 @@ class AppStore extends ChangeNotifier {
     final normalizedEmail = _normalizeEmail(email);
     final cleanPassword = password.trim();
 
-    if (!_isDefaultCredentials(normalizedEmail, cleanPassword)) {
-      throw Exception('Only the default admin account is allowed.');
-    }
-
     if (cleanName.isEmpty) throw Exception('Please enter your name');
     if (!_isValidEmail(normalizedEmail)) {
       throw Exception('Please enter a valid email address');
     }
+    if (cleanPassword.length < 6) {
+      throw Exception('Password must be at least 6 characters');
+    }
+    if (_users.containsKey(normalizedEmail)) {
+      throw Exception('An account with this email already exists');
+    }
 
     _users[normalizedEmail] = {
-      'password': defaultPassword,
+      'password': cleanPassword,
       'name': cleanName,
       'id': id.trim(),
       'uni': uni.trim(),
@@ -153,12 +195,11 @@ class AppStore extends ChangeNotifier {
   Future<void> loginWithEmail(String email, String password) async {
     final normalizedEmail = _normalizeEmail(email);
     final cleanPassword = password.trim();
+    final profile = _users[normalizedEmail];
 
-    if (!_isDefaultCredentials(normalizedEmail, cleanPassword)) {
+    if (profile == null || profile['password'] != cleanPassword) {
       throw Exception('Invalid email or password');
     }
-
-    final profile = _users[normalizedEmail] ?? <String, String>{};
 
     loggedIn = true;
     onboardingComplete = true;
@@ -173,20 +214,12 @@ class AppStore extends ChangeNotifier {
   }
 
   Future<void> login(String name, String id, String uni) async {
-    final normalizedEmail = userEmail.isNotEmpty ? userEmail : defaultEmail;
-    final defaultMatch =
-        _isDefaultCredentials(normalizedEmail, defaultPassword);
-
-    if (!defaultMatch) {
-      throw Exception('This app only allows the default login account.');
-    }
-
     loggedIn = true;
     onboardingComplete = true;
     studentName = name.trim().isEmpty ? 'Student' : name.trim();
     studentId = id.trim();
     university = uni.trim();
-    userEmail = normalizedEmail;
+    userEmail = userEmail.isNotEmpty ? userEmail : 'guest@local.app';
     await _save();
     notifyListeners();
   }
@@ -230,6 +263,16 @@ class AppStore extends ChangeNotifier {
 
   Future<void> addRecord(SemesterRecord record) async {
     history.insert(0, record);
+    notifications.insert(
+      0,
+      AppNotification(
+        id: DateTime.now().microsecondsSinceEpoch.toString(),
+        title: 'GPA Saved',
+        message:
+            'Your GPA for ${record.semester} is ${record.gpa.toStringAsFixed(2)}.',
+        createdAt: DateTime.now(),
+      ),
+    );
     await _save();
     notifyListeners();
   }
@@ -270,6 +313,10 @@ class AppStore extends ChangeNotifier {
     await prefs!.setString('university', university);
     await prefs!.setString('userEmail', userEmail);
     await prefs!.setString('users', jsonEncode(_users));
+    await prefs!.setString(
+      'notifications',
+      jsonEncode(notifications.map((e) => e.toJson()).toList()),
+    );
     await prefs!.setString(
       'history',
       jsonEncode(history.map((e) => e.toJson()).toList()),
