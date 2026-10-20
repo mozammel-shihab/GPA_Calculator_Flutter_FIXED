@@ -1,0 +1,10 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "GPA Calculator Pro",
+      "request": "launch",
+      "type": "dart"
+    }
+  ]
+}
